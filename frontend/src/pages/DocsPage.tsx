@@ -568,8 +568,18 @@ export function DocsPage() {
           <SectionHeading id="auth-flow">Authorization Flow</SectionHeading>
           <p className="text-muted-foreground mb-4">
             NS OAuth uses the <strong className="text-foreground">Authorization Code flow with PKCE</strong> (RFC 7636).
-            PKCE is required for all clients and prevents authorization code interception attacks.
+            PKCE is required for all clients.
           </p>
+          <div className="bg-secondary/50 border border-border rounded-lg p-4 mb-6 text-sm text-muted-foreground">
+            <strong className="text-foreground">What is PKCE?</strong> Proof Key for Code Exchange (pronounced "pixy") prevents
+            a class of attacks where someone intercepts the authorization code during the redirect back to your app.
+            Instead of relying solely on a client secret, your app generates a random <code className="text-foreground">code_verifier</code> string
+            and sends a SHA-256 hash of it (<code className="text-foreground">code_challenge</code>) in the authorize request.
+            When exchanging the code for tokens, you send the original <code className="text-foreground">code_verifier</code> — the server
+            hashes it and checks it matches the challenge. An attacker who intercepts the code can't use it because they
+            don't have the verifier. This makes the flow secure even for public clients (SPAs, mobile apps) that can't
+            safely store a client secret.
+          </div>
           <div className="bg-secondary/50 border border-border rounded-lg p-5 mb-6 font-mono text-sm text-muted-foreground space-y-2">
             <p><span className="text-foreground">1.</span> Your app generates a PKCE code_verifier + code_challenge (S256)</p>
             <p><span className="text-foreground">2.</span> Redirect user to <code className="text-foreground">/oauth/authorize</code> with challenge</p>

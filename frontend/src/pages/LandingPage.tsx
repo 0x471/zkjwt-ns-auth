@@ -146,12 +146,12 @@ export function LandingPage() {
             transition={{ duration: 0.6, ease: [0.25, 1, 0.5, 1] }}
           >
             <h1 className="text-[clamp(2.25rem,5.5vw,4rem)] font-bold tracking-tight leading-[1.08] mb-6">
-              Identity provider for
+              Membership verification for
               <br />
-              Network School
+              Network School apps
             </h1>
             <p className="text-lg sm:text-xl text-[#666] leading-relaxed max-w-xl mb-10">
-              Let your app verify NS membership, access Discord roles, and fetch profile data — all through standard OAuth 2.0.
+              Verify NS Discord membership, access roles, and fetch profile data in your app — all through standard OAuth 2.0.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link to="/docs">

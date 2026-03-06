@@ -9,6 +9,14 @@ export function Layout() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // If on root domain (nsauth.org), redirect to app.nsauth.org
+    // localStorage is origin-specific, so auth only works on app subdomain
+    const APP_HOSTNAME = import.meta.env.VITE_APP_HOSTNAME
+    if (APP_HOSTNAME && window.location.hostname !== APP_HOSTNAME && window.location.hostname !== "localhost") {
+      window.location.href = `https://${APP_HOSTNAME}${window.location.pathname}${window.location.search}`
+      return
+    }
+
     // If no session token in localStorage, skip the API call and redirect
     if (!getSessionToken()) {
       const next = encodeURIComponent(window.location.href)

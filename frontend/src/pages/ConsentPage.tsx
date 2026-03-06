@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "react-router-dom"
-import { API_BASE } from "@/lib/api"
+import { API_BASE, getSessionToken } from "@/lib/api"
 import { ScopeIcon } from "@/components/ui/scope-icon"
 import {
   User,
@@ -21,12 +21,18 @@ interface UserInfo {
   email: string | null
 }
 
+function authHeaders(): Record<string, string> {
+  const token = getSessionToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export function ConsentPage() {
   const [searchParams] = useSearchParams()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const autoApproved = useRef(false)
 
   const clientId = searchParams.get("client_id") || ""
   const redirectUri = searchParams.get("redirect_uri") || ""
@@ -34,25 +40,60 @@ export function ConsentPage() {
   const state = searchParams.get("state") || ""
   const codeChallenge = searchParams.get("code_challenge") || ""
   const codeChallengeMethod = searchParams.get("code_challenge_method") || ""
+  const prompt = searchParams.get("prompt") || ""
 
   useEffect(() => {
+    // If no session token, redirect to login flow
+    const token = getSessionToken()
+    if (!token) {
+      // Build authorize params to carry through login
+      const authorizeParams = new URLSearchParams()
+      searchParams.forEach((value, key) => {
+        authorizeParams.set(key, value)
+      })
+      // After login, come back to this consent page
+      const nextUrl = `${window.location.origin}/consent?${authorizeParams.toString()}`
+      window.location.href = `${API_BASE}/auth/discord?next=${encodeURIComponent(nextUrl)}`
+      return
+    }
+
     Promise.all([
       fetch(
         `${API_BASE}/oauth/authorize/info?client_id=${clientId}&scope=${encodeURIComponent(scope)}`
       ).then((r) => r.json()),
-      fetch(`${API_BASE}/auth/me`, { credentials: "include" }).then((r) =>
-        r.ok ? r.json() : null
-      ),
+      fetch(`${API_BASE}/auth/me`, {
+        credentials: "include",
+        headers: authHeaders(),
+      }).then((r) => r.ok ? r.json() : null),
     ])
       .then(([app, user]) => {
         setAppInfo(app)
         setUserInfo(user)
+
+        if (!user) {
+          // Session token expired/invalid — redirect to login
+          const authorizeParams = new URLSearchParams()
+          searchParams.forEach((value, key) => {
+            authorizeParams.set(key, value)
+          })
+          const nextUrl = `${window.location.origin}/consent?${authorizeParams.toString()}`
+          window.location.href = `${API_BASE}/auth/discord?next=${encodeURIComponent(nextUrl)}`
+          return
+        }
+
+        // Auto-approve if prompt is not "consent" (v1: users already consented at Discord)
+        if (prompt !== "consent" && !autoApproved.current) {
+          autoApproved.current = true
+          doConsent(true)
+          return
+        }
+
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [clientId, scope])
 
-  async function handleConsent(approved: boolean) {
+  async function doConsent(approved: boolean) {
     setSubmitting(true)
     const form = new URLSearchParams({
       client_id: clientId,
@@ -66,7 +107,10 @@ export function ConsentPage() {
 
     const resp = await fetch(`${API_BASE}/oauth/authorize/consent`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...authHeaders(),
+      },
       credentials: "include",
       body: form,
     })
@@ -76,7 +120,12 @@ export function ConsentPage() {
       window.location.href = data.redirect_to
     } else {
       setSubmitting(false)
+      setLoading(false)
     }
+  }
+
+  async function handleConsent(approved: boolean) {
+    await doConsent(approved)
   }
 
   if (loading) {

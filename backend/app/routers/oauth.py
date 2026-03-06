@@ -63,34 +63,17 @@ async def authorize(
         "state": state or "",
         "code_challenge": code_challenge or "",
         "code_challenge_method": code_challenge_method or "",
+        "prompt": prompt or "",
     })
 
-    user_id = get_session_user_id(request)
-    if user_id and prompt != "consent":
-        # v1: auto-approve — generate auth code and redirect immediately
-        # (skips consent screen since users already consented at Discord)
-        code = await authz_service.create_authorization_code(
-            db=db,
-            client_id=client_id,
-            user_id=user_id,
-            redirect_uri=redirect_uri,
-            scope=scope,
-            state=state or None,
-            code_challenge=code_challenge or None,
-            code_challenge_method=code_challenge_method or None,
-        )
-        params = {"code": code}
-        if state:
-            params["state"] = state
-        return RedirectResponse(
-            url=f"{redirect_uri}?{urlencode(params)}",
-            status_code=302,
-        )
-    else:
-        return RedirectResponse(
-            url=f"{settings.frontend_url}/login?{authorize_params}",
-            status_code=302,
-        )
+    # Always redirect to frontend consent page.
+    # The frontend checks localStorage for the session token and either
+    # auto-approves, shows consent, or redirects to login.
+    # This avoids cross-origin cookie issues on different domains.
+    return RedirectResponse(
+        url=f"{settings.frontend_url}/consent?{authorize_params}",
+        status_code=302,
+    )
 
 
 @router.get(

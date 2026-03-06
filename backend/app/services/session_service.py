@@ -51,7 +51,18 @@ def clear_session_cookie(response: Response) -> None:
 
 
 def get_session_user_id(request: Request) -> Optional[UUID]:
+    # 1. Try cookie (works same-origin / SameSite=None)
     token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        return None
-    return verify_session_token(token)
+    if token:
+        result = verify_session_token(token)
+        if result:
+            return result
+
+    # 2. Fallback: Authorization: Bearer <session_token> header
+    #    (works cross-origin when cookies are blocked)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        return verify_session_token(token)
+
+    return None

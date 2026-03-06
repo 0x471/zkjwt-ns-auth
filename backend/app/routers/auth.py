@@ -137,9 +137,20 @@ async def discord_callback(
     # Invalidate cached Discord data so fresh login data takes effect
     discord_service.invalidate_member_cache(discord_id)
 
-    # Create session and redirect
+    # Create session token
     session_token = create_session_token(user.id)
-    response = RedirectResponse(url=next_url, status_code=302)
+
+    # Token relay: pass session token to frontend via URL so it can store
+    # it in localStorage. This avoids cross-origin cookie issues when the
+    # frontend and backend are on different domains (e.g. Railway).
+    from urllib.parse import quote
+    relay_url = (
+        f"{settings.frontend_url}/auth/session"
+        f"?token={session_token}"
+        f"&next={quote(next_url, safe='')}"
+    )
+    response = RedirectResponse(url=relay_url, status_code=302)
+    # Also set cookie as fallback (works when same-origin)
     set_session_cookie(response, session_token)
     return response
 

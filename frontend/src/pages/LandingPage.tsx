@@ -1,318 +1,373 @@
 import { Link, Navigate } from "react-router-dom"
+import { useRef } from "react"
+import { motion, useInView } from "motion/react"
 import {
   Shield,
   Key,
-  Zap,
   Code2,
-  Globe,
   Users,
   ArrowRight,
   ExternalLink,
   BookOpen,
-  CheckCircle2,
+  Fingerprint,
+  Radio,
+  Layers,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
 const DEMO_URL = import.meta.env.VITE_DEMO_URL || "https://demo.nsauth.org"
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000"
 const APP_HOSTNAME = import.meta.env.VITE_APP_HOSTNAME || "app.nsauth.org"
+
+/* ── Data ── */
 
 const STEPS = [
   {
-    step: "1",
-    title: "Register Your App",
-    description: "Create an OAuth app in the dashboard to get your client_id and client_secret.",
+    num: "01",
+    title: "Register",
+    description: "Create an app in the dashboard. Get your client_id and secret.",
     icon: Key,
   },
   {
-    step: "2",
-    title: "User Signs In",
-    description: "Redirect users to NS OAuth. They authenticate via Discord and approve scopes.",
+    num: "02",
+    title: "Authenticate",
+    description: "Redirect users to NS OAuth. They sign in via Discord and approve scopes.",
     icon: Users,
   },
   {
-    step: "3",
-    title: "Get User Data",
-    description: "Exchange the auth code for tokens, then call /oauth/userinfo for profile data.",
+    num: "03",
+    title: "Access Data",
+    description: "Exchange the code for tokens. Fetch profile, roles, and membership data.",
     icon: Code2,
   },
 ]
 
 const FEATURES = [
   {
-    title: "Standards-based",
-    description: "Full OAuth 2.0 + OpenID Connect. PKCE, RS256 tokens, JWKS discovery.",
+    title: "OAuth 2.0 + OIDC",
+    description: "Standards-compliant. PKCE, RS256 signed tokens, JWKS discovery. Works with any auth library out of the box.",
     icon: Shield,
   },
   {
     title: "Membership Gating",
-    description: "Verify users are current Network School Discord members before granting access.",
-    icon: Users,
+    description: "Every sign-in verifies the user is a current Network School Discord member. Non-members are blocked automatically.",
+    icon: Fingerprint,
   },
   {
-    title: "Live Data",
-    description: "Discord roles, profile, and membership data fetched in real-time. Always current.",
-    icon: Zap,
+    title: "Real-time Data",
+    description: "Discord roles, display name, avatar, badges — fetched live with a 5-minute cache. Always current, never stale.",
+    icon: Radio,
   },
   {
-    title: "Developer-friendly",
-    description: "React & Next.js examples, comprehensive docs, and a working demo app.",
-    icon: Code2,
+    title: "Drop-in SDKs",
+    description: "Copy-paste React and Next.js examples. Or use NextAuth with a single issuer URL. Full docs and a working demo app.",
+    icon: Layers,
   },
 ]
 
-const ENDPOINTS = [
-  { method: "GET", path: "/oauth/authorize", description: "Start authorization flow" },
-  { method: "POST", path: "/oauth/token", description: "Exchange code for tokens" },
-  { method: "GET", path: "/oauth/userinfo", description: "Get user profile (Bearer token)" },
-  { method: "GET", path: "/.well-known/openid-configuration", description: "OIDC discovery" },
-  { method: "GET", path: "/.well-known/jwks.json", description: "Public signing keys" },
+const SCOPES = [
+  { scope: "openid", claims: "sub", note: "User identity" },
+  { scope: "profile", claims: "name, picture, username, badges", note: "Discord profile (live)" },
+  { scope: "email", claims: "email, email_verified", note: "Discord email" },
+  { scope: "roles", claims: "roles [ ]", note: "Discord server roles (live)" },
+  { scope: "date_joined", claims: "date_joined, boosting_since", note: "Membership dates" },
+  { scope: "offline_access", claims: "refresh_token", note: "Long-lived sessions" },
 ]
 
-const CODE_EXAMPLE = `import { generatePKCE } from "./pkce"
+const CODE_LINES = [
+  { text: 'import { generatePKCE } from "./pkce"', dim: true },
+  { text: '' },
+  { text: 'const { codeVerifier, codeChallenge }' },
+  { text: '  = await generatePKCE()' },
+  { text: '' },
+  { text: 'const params = new URLSearchParams({' },
+  { text: '  response_type: "code",', dim: true },
+  { text: '  client_id: YOUR_CLIENT_ID,', dim: true },
+  { text: '  scope: "openid profile email roles",', highlight: true },
+  { text: '  code_challenge: codeChallenge,', dim: true },
+  { text: '  code_challenge_method: "S256",', dim: true },
+  { text: '})' },
+  { text: '' },
+  { text: 'window.location.href =' },
+  { text: '  `https://api.nsauth.org/oauth/authorize?${params}`', highlight: true },
+]
 
-async function signInWithNS() {
-  const { codeVerifier, codeChallenge } = await generatePKCE()
-  sessionStorage.setItem("pkce_verifier", codeVerifier)
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: YOUR_CLIENT_ID,
-    redirect_uri: YOUR_REDIRECT_URI,
-    scope: "openid profile email roles",
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
-  })
-
-  window.location.href =
-    \`https://api.nsauth.org/oauth/authorize?\${params}\`
+const USERINFO_JSON = `{
+  "sub": "3eda7aa4-9114-4a6a-8f68-c91d0553c3c9",
+  "name": "Alice",
+  "picture": "https://cdn.discordapp.com/avatars/...",
+  "email": "alice@networkschool.com",
+  "email_verified": true,
+  "discord_username": "alice",
+  "roles": [
+    { "id": "1234567890", "name": "Cohort 5" },
+    { "id": "0987654321", "name": "Builder" }
+  ],
+  "date_joined": "2024-06-15T10:30:00Z",
+  "public_badges": ["ActiveDeveloper"]
 }`
 
+/* ── Animated wrapper ── */
+
+function Reveal({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: "-80px" })
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 24 }}
+      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+      transition={{ duration: 0.5, ease: [0.25, 1, 0.5, 1], delay }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/* ── Page ── */
+
 export function LandingPage() {
-  // On the app subdomain, skip landing page and go straight to dashboard
   if (window.location.hostname === APP_HOSTNAME) {
     return <Navigate to="/dashboard" replace />
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto flex items-center justify-between h-14 px-4">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="font-semibold text-foreground flex items-center gap-2">
+    <div className="min-h-screen bg-white text-[#0a0a0a]">
+      {/* ── Nav ── */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/60">
+        <div className="max-w-[1200px] mx-auto flex items-center justify-between h-14 px-6">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="font-semibold flex items-center gap-2">
               <Shield className="h-4 w-4" />
               NS OAuth
             </Link>
-            <nav className="hidden sm:flex items-center gap-4 text-sm">
-              <Link to="/docs" className="text-muted-foreground hover:text-foreground transition-colors">
-                Docs
-              </Link>
-              <a
-                href={DEMO_URL}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Demo
-              </a>
-              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-                Dashboard
-              </Link>
+            <nav className="hidden sm:flex items-center gap-5 text-sm text-[#666]">
+              <Link to="/docs" className="hover:text-[#0a0a0a] transition-colors">Docs</Link>
+              <a href={DEMO_URL} className="hover:text-[#0a0a0a] transition-colors">Demo</a>
+              <Link to="/dashboard" className="hover:text-[#0a0a0a] transition-colors">Dashboard</Link>
             </nav>
           </div>
-          <Link to="/dashboard">
-            <Button size="sm">Get Started</Button>
+          <Link to="/docs">
+            <button className="h-9 px-4 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors flex items-center gap-1.5">
+              Get Started <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </Link>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="py-20 sm:py-28">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground mb-6">
-            <Globe className="h-3 w-3" />
-            OAuth 2.0 + OpenID Connect
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            Sign in with Network School
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-            The identity provider for the NS ecosystem. Let your app verify membership,
-            access roles, and fetch profile data — all through standard OAuth.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link to="/docs">
-              <Button size="lg">
-                <BookOpen className="h-4 w-4 mr-2" />
-                Read the Docs
-              </Button>
-            </Link>
-            <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="lg">
-                View Demo
-                <ExternalLink className="h-3.5 w-3.5 ml-2" />
-              </Button>
-            </a>
-          </div>
+      {/* ── Hero ── */}
+      <section className="pt-24 pb-20 sm:pt-36 sm:pb-28 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.25, 1, 0.5, 1] }}
+            className="max-w-3xl"
+          >
+            <h1 className="text-[clamp(2.25rem,5.5vw,4.25rem)] font-bold tracking-tight leading-[1.08] mb-6">
+              Identity provider for
+              <br />
+              Network School
+            </h1>
+            <p className="text-lg sm:text-xl text-[#666] leading-relaxed max-w-xl mb-10">
+              Let your app verify NS membership, access Discord roles, and fetch profile data — all through standard OAuth 2.0.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link to="/docs">
+                <button className="h-11 px-6 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Documentation
+                </button>
+              </Link>
+              <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
+                <button className="h-11 px-6 bg-white text-black text-sm font-medium rounded-lg border-2 border-black/10 hover:bg-gray-50 transition-colors flex items-center gap-2">
+                  Live Demo
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </button>
+              </a>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4">
-          <h2 className="text-2xl font-bold text-center mb-12">How It Works</h2>
-          <div className="grid sm:grid-cols-3 gap-8">
+      {/* ── Divider ── */}
+      <div className="max-w-[1200px] mx-auto px-6"><hr className="border-gray-200" /></div>
+
+      {/* ── How It Works ── */}
+      <section className="py-20 sm:py-28 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <Reveal>
+            <p className="text-sm font-medium text-[#999] uppercase tracking-wider mb-3">How it works</p>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-16">Three steps to integrate</h2>
+          </Reveal>
+
+          <div className="grid sm:grid-cols-3 gap-8 sm:gap-12">
             {STEPS.map((step, i) => (
-              <div key={step.step} className="relative text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
-                  <step.icon className="h-5 w-5 text-foreground" />
-                </div>
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                  Step {step.step}
-                </div>
-                <h3 className="font-semibold mb-2">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
-                {i < STEPS.length - 1 && (
-                  <ArrowRight className="hidden sm:block absolute top-6 -right-4 h-4 w-4 text-muted-foreground/40" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4">
-          <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
-          <div className="grid sm:grid-cols-2 gap-6">
-            {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-xl border border-border bg-card p-6"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">
-                    <f.icon className="h-4 w-4 text-foreground" />
+              <Reveal key={step.num} delay={i * 0.1}>
+                <div className="group">
+                  <div className="flex items-center justify-between mb-6">
+                    <span className="text-xs font-mono text-[#ccc] tracking-wider">{step.num}</span>
+                    <div className="h-10 w-10 rounded-lg bg-[#f5f5f5] flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors duration-200">
+                      <step.icon className="h-4 w-4" />
+                    </div>
                   </div>
-                  <h3 className="font-semibold">{f.title}</h3>
+                  <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
+                  <p className="text-sm text-[#666] leading-relaxed">{step.description}</p>
                 </div>
-                <p className="text-sm text-muted-foreground">{f.description}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Code Preview */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-10 items-start">
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Simple Integration</h2>
-              <p className="text-muted-foreground mb-6">
-                Add "Sign in with Network School" to your app in minutes.
-                Standard OAuth 2.0 with PKCE — works with any framework.
-              </p>
-              <ul className="space-y-3 text-sm">
-                {[
-                  "PKCE S256 for secure public clients",
-                  "RS256 signed JWTs — verify offline",
-                  "Scope-gated claims (profile, roles, email)",
-                  "OIDC discovery for auto-configuration",
-                ].map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-muted-foreground">
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-foreground shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-xl border border-border bg-[#0a0a0a] text-[#e5e5e5] p-5 overflow-x-auto">
-              <div className="flex items-center gap-1.5 mb-4">
-                <div className="h-2.5 w-2.5 rounded-full bg-[#737373]" />
-                <div className="h-2.5 w-2.5 rounded-full bg-[#737373]" />
-                <div className="h-2.5 w-2.5 rounded-full bg-[#737373]" />
-                <span className="ml-2 text-xs text-[#737373]">SignInWithNS.ts</span>
+      <div className="max-w-[1200px] mx-auto px-6"><hr className="border-gray-200" /></div>
+
+      {/* ── Features ── */}
+      <section className="py-20 sm:py-28 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <Reveal>
+            <p className="text-sm font-medium text-[#999] uppercase tracking-wider mb-3">Capabilities</p>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Built for the NS ecosystem</h2>
+            <p className="text-[#666] max-w-lg mb-16 leading-relaxed">
+              Everything you need to add Network School identity to your app.
+            </p>
+          </Reveal>
+
+          <div className="grid sm:grid-cols-2 gap-6">
+            {FEATURES.map((f, i) => (
+              <Reveal key={f.title} delay={i * 0.08}>
+                <div className="group p-6 sm:p-8 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+                  <div className="h-10 w-10 rounded-lg bg-[#f5f5f5] flex items-center justify-center mb-5 group-hover:bg-black group-hover:text-white transition-colors duration-200">
+                    <f.icon className="h-4 w-4" />
+                  </div>
+                  <h3 className="font-semibold text-base mb-2">{f.title}</h3>
+                  <p className="text-sm text-[#666] leading-relaxed">{f.description}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="max-w-[1200px] mx-auto px-6"><hr className="border-gray-200" /></div>
+
+      {/* ── Code + Userinfo side by side ── */}
+      <section className="py-20 sm:py-28 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <Reveal>
+            <p className="text-sm font-medium text-[#999] uppercase tracking-wider mb-3">Integration</p>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Simple to implement</h2>
+            <p className="text-[#666] max-w-lg mb-12 leading-relaxed">
+              Redirect users to authenticate, exchange the code, and get back structured user data. Works with any framework.
+            </p>
+          </Reveal>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Sign-in code */}
+            <Reveal delay={0.05}>
+              <div className="rounded-xl border border-gray-200 bg-[#fafafa] overflow-hidden h-full">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200 bg-white">
+                  <Code2 className="h-3.5 w-3.5 text-[#999]" />
+                  <span className="text-xs text-[#999] font-medium">sign-in-with-ns.ts</span>
+                </div>
+                <div className="p-5 font-mono text-[12.5px] leading-[1.8] overflow-x-auto">
+                  {CODE_LINES.map((line, i) => (
+                    <div key={i} className="flex">
+                      <span className="w-6 text-right mr-4 text-[#ccc] select-none text-[11px]">{i + 1}</span>
+                      <span className={
+                        line.highlight ? "text-[#0a0a0a] font-medium" :
+                        line.dim ? "text-[#999]" : "text-[#444]"
+                      }>
+                        {line.text || "\u00A0"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <pre className="text-xs leading-relaxed font-mono whitespace-pre">{CODE_EXAMPLE}</pre>
+            </Reveal>
+
+            {/* Userinfo response */}
+            <Reveal delay={0.15}>
+              <div className="rounded-xl border border-gray-200 bg-[#fafafa] overflow-hidden h-full">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200 bg-white">
+                  <span className="text-xs font-mono font-medium text-emerald-600">GET</span>
+                  <span className="text-xs text-[#999] font-medium">/oauth/userinfo response</span>
+                </div>
+                <pre className="p-5 font-mono text-[12.5px] leading-[1.8] text-[#444] overflow-x-auto whitespace-pre">{USERINFO_JSON}</pre>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      <div className="max-w-[1200px] mx-auto px-6"><hr className="border-gray-200" /></div>
+
+      {/* ── Scopes ── */}
+      <section className="py-20 sm:py-28 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <Reveal>
+            <p className="text-sm font-medium text-[#999] uppercase tracking-wider mb-3">Scopes</p>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Request only what you need</h2>
+            <p className="text-[#666] max-w-lg mb-16 leading-relaxed">
+              Granular, consent-driven access. Users see exactly what data your app requests.
+            </p>
+          </Reveal>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {SCOPES.map((s, i) => (
+              <Reveal key={s.scope} delay={i * 0.05}>
+                <div className="p-5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+                  <code className="text-sm font-semibold">{s.scope}</code>
+                  <p className="text-xs text-[#666] mt-2 leading-relaxed">{s.claims}</p>
+                  <p className="text-[11px] text-[#aaa] mt-1">{s.note}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="max-w-[1200px] mx-auto px-6"><hr className="border-gray-200" /></div>
+
+      {/* ── CTA ── */}
+      <section className="py-24 sm:py-32 px-6">
+        <div className="max-w-[1200px] mx-auto text-center">
+          <Reveal>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+              Start building today
+            </h2>
+            <p className="text-[#666] max-w-md mx-auto mb-10 leading-relaxed">
+              Register your app, grab your credentials, and add "Sign in with Network School" in minutes.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Link to="/docs">
+                <button className="h-11 px-6 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors flex items-center gap-2">
+                  Read the Docs
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </Link>
+              <Link to="/dashboard">
+                <button className="h-11 px-6 bg-white text-black text-sm font-medium rounded-lg border-2 border-black/10 hover:bg-gray-50 transition-colors">
+                  Open Dashboard
+                </button>
+              </Link>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
-      {/* Endpoints */}
-      <section className="py-16 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4">
-          <h2 className="text-2xl font-bold text-center mb-2">API Endpoints</h2>
-          <p className="text-center text-sm text-muted-foreground mb-8">
-            Base URL: <code className="text-foreground bg-secondary px-1.5 py-0.5 rounded text-xs">{API_BASE}</code>
-          </p>
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left font-medium py-3 px-4 text-muted-foreground">Method</th>
-                  <th className="text-left font-medium py-3 px-4 text-muted-foreground">Endpoint</th>
-                  <th className="text-left font-medium py-3 px-4 text-muted-foreground hidden sm:table-cell">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ENDPOINTS.map((ep) => (
-                  <tr key={ep.path} className="border-b border-border last:border-0">
-                    <td className="py-3 px-4">
-                      <span className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">{ep.method}</span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs">{ep.path}</td>
-                    <td className="py-3 px-4 text-muted-foreground hidden sm:table-cell">{ep.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 border-t border-border">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold mb-3">Ready to integrate?</h2>
-          <p className="text-muted-foreground mb-6">
-            Register your app, grab your credentials, and start building.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link to="/docs">
-              <Button size="lg">
-                Read the Docs
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-            <Link to="/dashboard">
-              <Button variant="outline" size="lg">
-                Go to Dashboard
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-8">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+      {/* ── Footer ── */}
+      <footer className="border-t border-gray-200 py-8 px-6">
+        <div className="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#999]">
           <div className="flex items-center gap-2">
             <Shield className="h-3.5 w-3.5" />
-            <span>NS OAuth</span>
+            <span className="font-medium text-[#666]">NS OAuth</span>
           </div>
-          <nav className="flex items-center gap-4">
-            <Link to="/docs" className="hover:text-foreground transition-colors">Docs</Link>
-            <a href={DEMO_URL} className="hover:text-foreground transition-colors">Demo</a>
-            <Link to="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            <a
-              href="https://www.networkschool.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              Network School
+          <nav className="flex items-center gap-5 text-[13px]">
+            <Link to="/docs" className="hover:text-[#0a0a0a] transition-colors">Docs</Link>
+            <a href={DEMO_URL} className="hover:text-[#0a0a0a] transition-colors">Demo</a>
+            <Link to="/dashboard" className="hover:text-[#0a0a0a] transition-colors">Dashboard</Link>
+            <a href="https://ns.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#0a0a0a] transition-colors">
+              ns.com
             </a>
           </nav>
         </div>

@@ -1,9 +1,31 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000"
 
+const SESSION_KEY = "ns_session_token"
+
+export function getSessionToken(): string | null {
+  return localStorage.getItem(SESSION_KEY)
+}
+
+export function setSessionToken(token: string): void {
+  localStorage.setItem(SESSION_KEY, token)
+}
+
+export function clearSessionToken(): void {
+  localStorage.removeItem(SESSION_KEY)
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getSessionToken()
+  if (token) {
+    return { Authorization: `Bearer ${token}` }
+  }
+  return {}
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...options,
   })
   if (!res.ok) {
@@ -131,7 +153,10 @@ export interface UserMe {
 
 export const api = {
   getMe: () =>
-    fetch(`${API_BASE}/auth/me`, { credentials: "include" }).then(async (res) => {
+    fetch(`${API_BASE}/auth/me`, {
+      credentials: "include",
+      headers: authHeaders(),
+    }).then(async (res) => {
       if (!res.ok) return null
       return res.json() as Promise<UserMe>
     }),

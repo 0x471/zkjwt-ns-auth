@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Outlet } from "react-router-dom"
 import { Header } from "./Header"
-import { API_BASE, api } from "@/lib/api"
+import { API_BASE, api, getSessionToken } from "@/lib/api"
 import type { UserMe } from "@/lib/api"
 
 export function Layout() {
@@ -9,12 +9,19 @@ export function Layout() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // If no session token in localStorage, skip the API call and redirect
+    if (!getSessionToken()) {
+      const next = encodeURIComponent(window.location.href)
+      window.location.href = `${API_BASE}/auth/discord?next=${next}`
+      return
+    }
+
     api.getMe().then((me) => {
       if (me) {
         setUser(me)
         setLoading(false)
       } else {
-        // Not authenticated — redirect to Discord login, come back to current page
+        // Token invalid/expired — redirect to Discord login
         const next = encodeURIComponent(window.location.href)
         window.location.href = `${API_BASE}/auth/discord?next=${next}`
       }

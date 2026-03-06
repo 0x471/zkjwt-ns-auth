@@ -1,4 +1,4 @@
-# Network School OAuth Provider
+# NS Auth
 
 OAuth 2.0 / OpenID Connect identity provider for Network School. Lets third-party apps authenticate NS users via **"Sign in with Network School"** — the same pattern as "Sign in with Google."
 
@@ -8,23 +8,23 @@ Users authenticate via **Discord OAuth2**. The backend verifies they're a member
 
 Building an app for Network School? Here's how to integrate:
 
-- **[Developer Docs](https://frontend-production-a6eb.up.railway.app/docs)** — Full integration guide with React and Next.js code snippets, endpoint reference, scopes & claims, and error handling.
-- **[Demo App](https://demo-app-production-9550.up.railway.app)** — Working reference implementation of "Sign in with Network School" (source in `demo-app/`).
-- **[OIDC Discovery](https://backend-production-c59b.up.railway.app/.well-known/openid-configuration)** — Auto-configure your OAuth library with the OIDC discovery endpoint.
+- **[Developer Docs](https://app.nsauth.org/docs)** — Full integration guide with React and Next.js code snippets, endpoint reference, scopes & claims, and error handling.
+- **[Demo App](https://demo.nsauth.org)** — Working reference implementation of "Sign in with Network School" (source in `demo-app/`).
+- **[OIDC Discovery](https://api.nsauth.org/.well-known/openid-configuration)** — Auto-configure your OAuth library with the OIDC discovery endpoint.
 
-Quick steps: Register an app on the [admin dashboard](https://frontend-production-a6eb.up.railway.app), get your `client_id` and `client_secret`, then follow the code examples in the docs.
+Quick steps: Register an app on the [developer dashboard](https://app.nsauth.org), get your `client_id` and `client_secret`, then follow the code examples in the docs.
 
 ### OIDC — What is it?
 
 **OpenID Connect (OIDC)** is a standard identity layer on top of OAuth 2.0. OAuth alone handles *authorization* ("this app can access your data"), OIDC adds *authentication* ("this is who the user is").
 
-This server is a full **OIDC provider**. It publishes a [discovery document](https://backend-production-c59b.up.railway.app/.well-known/openid-configuration) that describes all endpoints, supported scopes, and signing keys. Any OIDC-compatible library can auto-configure itself from this one URL:
+This server is a full **OIDC provider**. It publishes a [discovery document](https://api.nsauth.org/.well-known/openid-configuration) that describes all endpoints, supported scopes, and signing keys. Any OIDC-compatible library can auto-configure itself from this one URL:
 
 ```
-https://backend-production-c59b.up.railway.app/.well-known/openid-configuration
+https://api.nsauth.org/.well-known/openid-configuration
 ```
 
-**For NextAuth / Auth.js users:** Just set `issuer: "https://backend-production-c59b.up.railway.app"` with `type: "oidc"` and NextAuth handles everything — endpoint discovery, PKCE, token verification, and session management. See the [developer docs](https://frontend-production-a6eb.up.railway.app/docs#nextauth) for a complete example.
+**For NextAuth / Auth.js users:** Just set `issuer: "https://api.nsauth.org"` with `type: "oidc"` and NextAuth handles everything — endpoint discovery, PKCE, token verification, and session management. See the [developer docs](https://app.nsauth.org/docs#nextauth) for a complete example.
 
 ---
 
@@ -44,11 +44,12 @@ https://backend-production-c59b.up.railway.app/.well-known/openid-configuration
                     └──────────────────┘
 ```
 
-| Service | Local | Production |
-|---------|-------|------------|
-| Backend | http://localhost:8000 | https://backend-production-c59b.up.railway.app |
-| Frontend (Admin) | http://localhost:5173 | https://frontend-production-a6eb.up.railway.app |
-| Demo App | http://localhost:3000 | https://demo-app-production-9550.up.railway.app |
+| Service | Local | Production | Custom Domain |
+|---------|-------|------------|---------------|
+| Backend | http://localhost:8000 | https://api.nsauth.org | https://api.nsauth.org |
+| Frontend | http://localhost:5173 | https://frontend-production-a6eb.up.railway.app | https://app.nsauth.org |
+| Demo App | http://localhost:3000 | https://demo-app-production-9550.up.railway.app | https://demo.nsauth.org |
+| Landing Page | (same as frontend) | (same as frontend) | https://nsauth.org |
 
 ---
 
@@ -223,7 +224,7 @@ DELETE /api/apps/{app_id} # Delete app
 This is the primary flow for apps that want users to "Sign in with Network School."
 
 ```
-Your App                    NS OAuth Server                Discord
+Your App                    NS Auth Server                Discord
   │                              │                            │
   │──1. Redirect to /authorize──▶│                            │
   │                              │──2. Redirect to Discord───▶│
@@ -261,7 +262,7 @@ https://yourapp.com/callback?code=AUTH_CODE&state=RANDOM_STATE
 **Step 6 — Exchange code for tokens:**
 
 ```bash
-curl -X POST https://backend-production-c59b.up.railway.app/oauth/token \
+curl -X POST https://api.nsauth.org/oauth/token \
   -d "grant_type=authorization_code" \
   -d "code=AUTH_CODE" \
   -d "redirect_uri=https://yourapp.com/callback" \
@@ -286,7 +287,7 @@ Response (when `offline_access` scope is granted):
 **Step 8 — Fetch user info:**
 
 ```bash
-curl https://backend-production-c59b.up.railway.app/oauth/userinfo \
+curl https://api.nsauth.org/oauth/userinfo \
   -H "Authorization: Bearer ACCESS_TOKEN"
 ```
 
@@ -295,7 +296,7 @@ curl https://backend-production-c59b.up.railway.app/oauth/userinfo \
 When `offline_access` scope is granted, the token response includes a `refresh_token`. Use it to get new tokens without re-authenticating:
 
 ```bash
-curl -X POST https://backend-production-c59b.up.railway.app/oauth/token \
+curl -X POST https://api.nsauth.org/oauth/token \
   -d "grant_type=refresh_token" \
   -d "refresh_token=REFRESH_TOKEN" \
   -d "client_id=YOUR_CLIENT_ID" \
@@ -436,6 +437,8 @@ Each service has a `railway.toml` in its directory that configures the build and
 | Variable | Description |
 |----------|-------------|
 | `VITE_API_BASE` | Backend URL |
+| `VITE_APP_HOSTNAME` | App subdomain hostname (e.g. `app.nsauth.org`) — used to redirect root domain to app subdomain for auth |
+| `VITE_DEMO_URL` | Demo app URL (for landing page links) |
 | `NIXPACKS_NODE_VERSION` | Set to `20` (required for Vite 7) |
 
 **Demo App** (`--service demo-app`):
@@ -504,6 +507,7 @@ The backend auto-detects whether to use env var keys or file-based keys (`backen
 | Session cookie not sent | Consent "Allow" does nothing | Already handled: `SameSite=None; Secure=True` auto-detected for HTTPS |
 | Old code after deploy | New endpoints return 404 | Check `railway deployment list` — deploy may have failed |
 | CORS errors | Browser blocks requests | Update `OAUTH_CORS_ORIGINS` with all frontend/client URLs |
+| Discord login loop | Keeps redirecting to Discord after login | Likely on root domain (`nsauth.org`) — auth only works on `app.nsauth.org` due to separate localStorage per origin. Layout auto-redirects. |
 
 ---
 
@@ -557,7 +561,7 @@ ns-auth/
 │   └── railway.toml
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/           # Dashboard, CreateApp, AppDetail, Login, Consent
+│   │   ├── pages/           # LandingPage, Dashboard, CreateApp, AppDetail, Login, Consent, DocsPage, AuthSession
 │   │   ├── components/      # shadcn-style UI components
 │   │   └── lib/             # API client, utilities
 │   ├── package.json

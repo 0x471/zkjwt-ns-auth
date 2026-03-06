@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom"
 import { LogOut, Settings, BookOpen } from "lucide-react"
-import { API_BASE } from "@/lib/api"
+import { API_BASE, clearSessionToken } from "@/lib/api"
 import type { UserMe } from "@/lib/api"
 
 export function Header({ user }: { user: UserMe | null }) {
   async function handleLogout() {
+    clearSessionToken()
     await fetch(`${API_BASE}/auth/logout`, {
       method: "POST",
       credentials: "include",
@@ -16,7 +17,7 @@ export function Header({ user }: { user: UserMe | null }) {
     <header className="border-b border-border">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-foreground">
+          <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-foreground">
             OAuth
           </Link>
           <Link

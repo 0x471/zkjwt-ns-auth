@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -96,6 +97,11 @@ app.include_router(scope_admin.router)
 app.include_router(scopes.router)
 app.include_router(uploads.router)
 app.include_router(wellknown.router)
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse("https://nsauth.org")
 
 
 @app.get("/health", tags=["health"], summary="Health check", description="Returns `{\"status\": \"ok\"}` when the server is running.")

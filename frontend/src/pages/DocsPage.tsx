@@ -452,7 +452,7 @@ export function DocsPage() {
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <span className="text-foreground font-medium">Docs</span>
-              <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
+              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
                 Dashboard
               </Link>
             </nav>
@@ -537,7 +537,7 @@ export function DocsPage() {
                 <span className="font-semibold text-foreground">1.</span>
                 <span className="text-muted-foreground">
                   Go to the{" "}
-                  <Link to="/" className="text-foreground underline underline-offset-4">
+                  <Link to="/dashboard" className="text-foreground underline underline-offset-4">
                     admin dashboard
                   </Link>{" "}
                   and click "New App".

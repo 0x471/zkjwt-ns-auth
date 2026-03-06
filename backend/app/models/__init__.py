@@ -5,5 +5,6 @@ from app.models.user import User
 from app.models.authorization_code import AuthorizationCode
 from app.models.scope_definition import ScopeDefinition
 from app.models.claim_definition import ClaimDefinition
+from app.models.oauth_state import OAuthState
 
-__all__ = ["OAuthApp", "AccessToken", "RefreshToken", "User", "AuthorizationCode", "ScopeDefinition", "ClaimDefinition"]
+__all__ = ["OAuthApp", "AccessToken", "RefreshToken", "User", "AuthorizationCode", "ScopeDefinition", "ClaimDefinition", "OAuthState"]

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import secrets
-from typing import Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.models.oauth_state import OAuthState
 from app.services import discord_service, user_service
 from app.services.session_service import (
     create_session_token,
@@ -21,9 +24,7 @@ from app.services.session_service import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# In-memory state store for Discord OAuth2 CSRF protection.
-# Maps state token → next URL. Entries are consumed (popped) on callback.
-_oauth_state_store: Dict[str, str] = {}
+STATE_TTL = timedelta(minutes=10)
 
 
 class UserResponse(BaseModel):
@@ -49,10 +50,25 @@ class UserResponse(BaseModel):
     description="Generates a CSRF state token, stores the `next` URL, and redirects the user to Discord's OAuth2 authorization page. After Discord login, the user is sent to `/auth/discord/callback`.",
     responses={302: {"description": "Redirect to Discord OAuth2 authorization page."}},
 )
-async def discord_login(request: Request):
+async def discord_login(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     next_url = request.query_params.get("next", settings.frontend_url)
     state = secrets.token_urlsafe(32)
-    _oauth_state_store[state] = next_url
+
+    # Clean up expired states opportunistically
+    await db.execute(
+        delete(OAuthState).where(OAuthState.expires_at < datetime.now(timezone.utc))
+    )
+
+    db.add(OAuthState(
+        state=state,
+        next_url=next_url,
+        expires_at=datetime.now(timezone.utc) + STATE_TTL,
+    ))
+    await db.commit()
+
     authorize_url = discord_service.get_authorize_url(state)
     return RedirectResponse(url=authorize_url, status_code=302)
 
@@ -82,14 +98,30 @@ async def discord_callback(
             status_code=302,
         )
 
-    # Validate state
-    if not state or state not in _oauth_state_store:
+    # Validate state from database
+    if not state:
         return RedirectResponse(
             url=f"{login_error_url}?{urlencode({'error': 'invalid_state'})}",
             status_code=302,
         )
 
-    next_url = _oauth_state_store.pop(state)
+    result = await db.execute(
+        select(OAuthState).where(
+            OAuthState.state == state,
+            OAuthState.expires_at >= datetime.now(timezone.utc),
+        )
+    )
+    oauth_state = result.scalar_one_or_none()
+    if not oauth_state:
+        return RedirectResponse(
+            url=f"{login_error_url}?{urlencode({'error': 'invalid_state'})}",
+            status_code=302,
+        )
+
+    next_url = oauth_state.next_url
+    # Consume the state (one-time use)
+    await db.delete(oauth_state)
+    await db.commit()
 
     if not code:
         return RedirectResponse(

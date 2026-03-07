@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { ArrowLeft, Trash2, Pencil, Save, X, ExternalLink, Upload, Loader2 } from "lucide-react"
+import { ArrowLeft, Trash2, Pencil, Save, X, ExternalLink, Upload, Loader2, Copy, Check, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,6 +15,55 @@ import { CredentialDisplay } from "@/components/apps/CredentialDisplay"
 import { ApiPlayground } from "@/components/apps/ApiPlayground"
 import { api, API_BASE } from "@/lib/api"
 import type { OAuthApp, ScopeDefinition } from "@/lib/api"
+
+function AuthorizeUrlCard({ app }: { app: OAuthApp }) {
+  const [copied, setCopied] = useState(false)
+  const redirectUri = app.redirect_uris[0] || "https://yourapp.com/callback"
+  const scopes = app.scopes.length > 0 ? app.scopes.join(" ") : "openid profile email"
+
+  const authorizeUrl = `${API_BASE}/oauth/authorize?response_type=code&client_id=${app.client_id}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=RANDOM_STATE&code_challenge=YOUR_PKCE_CHALLENGE&code_challenge_method=S256`
+
+  function handleCopy() {
+    navigator.clipboard.writeText(authorizeUrl)
+    setCopied(true)
+    toast.success("Authorize URL copied")
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              Authorize URL
+            </CardTitle>
+            <CardDescription>
+              Pre-built URL to start the OAuth flow — replace the PKCE placeholders at runtime
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleCopy}>
+            {copied ? (
+              <><Check className="mr-1.5 h-3.5 w-3.5" /> Copied</>
+            ) : (
+              <><Copy className="mr-1.5 h-3.5 w-3.5" /> Copy URL</>
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <pre className="rounded-md bg-[#0a0a0b] text-[#e4e4e7] p-4 text-xs font-mono whitespace-pre-wrap break-all leading-relaxed overflow-x-auto">
+          {`${API_BASE}/oauth/authorize\n  ?response_type=code\n  &client_id=${app.client_id}\n  &redirect_uri=${encodeURIComponent(redirectUri)}\n  &scope=${encodeURIComponent(scopes)}\n  &state=`}<span className="text-amber-400">RANDOM_STATE</span>{`\n  &code_challenge=`}<span className="text-amber-400">YOUR_PKCE_CHALLENGE</span>{`\n  &code_challenge_method=S256`}
+        </pre>
+        <p className="text-xs text-muted-foreground mt-3">
+          Generate <code className="text-foreground bg-secondary px-1 rounded">code_challenge</code> and <code className="text-foreground bg-secondary px-1 rounded">state</code> at runtime.
+          See the <a href="/docs#auth-flow" className="text-foreground underline underline-offset-4">authorization flow docs</a> for details.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 
 export function AppDetail() {
   const { id } = useParams<{ id: string }>()
@@ -37,7 +86,7 @@ export function AppDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    api.getScopes().then(setAvailableScopes).catch(() => {})
+    api.getScopes().then(setAvailableScopes).catch(() => { })
   }, [])
 
   useEffect(() => {
@@ -297,6 +346,8 @@ export function AppDetail() {
             </CardContent>
           </Card>
 
+          <AuthorizeUrlCard app={app} />
+
           <Card>
             <CardHeader>
               <CardTitle>Redirect URIs</CardTitle>
@@ -373,7 +424,7 @@ export function AppDetail() {
         </CardHeader>
         <CardContent>
           <pre className="rounded-md bg-secondary p-4 text-xs font-mono whitespace-pre-wrap break-all">
-{`curl -X POST ${API_BASE}/oauth/token \\
+            {`curl -X POST ${API_BASE}/oauth/token \\
   -d "grant_type=client_credentials" \\
   -d "client_id=${app.client_id}" \\
   -d "client_secret=YOUR_SECRET"`}

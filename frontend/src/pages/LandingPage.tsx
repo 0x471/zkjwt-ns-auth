@@ -1,5 +1,6 @@
 import { Link, Navigate } from "react-router-dom"
 import { useRef } from "react"
+import { getSessionToken } from "@/lib/api"
 import { motion, useInView } from "motion/react"
 import {
   Shield,
@@ -191,7 +192,7 @@ function FlowArrow({ gridCol, direction, label, color }: {
 /* ── Page ── */
 
 export function LandingPage() {
-  if (window.location.hostname === APP_HOSTNAME) {
+  if (window.location.hostname === APP_HOSTNAME && getSessionToken()) {
     return <Navigate to="/dashboard" replace />
   }
 

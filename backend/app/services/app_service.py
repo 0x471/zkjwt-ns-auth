@@ -54,8 +54,11 @@ async def create_app(
     return app, client_secret
 
 
-async def list_apps(db: AsyncSession) -> List[OAuthApp]:
-    result = await db.execute(select(OAuthApp).order_by(OAuthApp.created_at.desc()))
+async def list_apps(db: AsyncSession, owner_id: Optional[UUID] = None) -> List[OAuthApp]:
+    query = select(OAuthApp)
+    if owner_id is not None:
+        query = query.where(OAuthApp.owner_id == owner_id)
+    result = await db.execute(query.order_by(OAuthApp.created_at.desc()))
     return list(result.scalars().all())
 
 

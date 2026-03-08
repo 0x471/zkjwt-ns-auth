@@ -64,8 +64,8 @@ async def create_app(body: OAuthAppCreate, db: AsyncSession = Depends(get_db), u
     summary="List all OAuth apps",
     description="Returns all registered OAuth applications, sorted by creation date (newest first). Does not include client secrets.",
 )
-async def list_apps(db: AsyncSession = Depends(get_db), _user: UUID = Depends(require_session)):
-    return await app_service.list_apps(db)
+async def list_apps(db: AsyncSession = Depends(get_db), user_id: UUID = Depends(require_session)):
+    return await app_service.list_apps(db, owner_id=user_id)
 
 
 @router.get(
@@ -120,10 +120,13 @@ async def update_app_status(
     description="Returns a single OAuth app by its UUID. Does not include the client secret.",
     responses={404: {"description": "App not found."}},
 )
-async def get_app(app_id: UUID, db: AsyncSession = Depends(get_db), _user: UUID = Depends(require_session)):
+async def get_app(app_id: UUID, db: AsyncSession = Depends(get_db), user_id: UUID = Depends(require_session)):
     app = await app_service.get_app(db, app_id)
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
+    user = await user_service.get_user_by_id(db, user_id)
+    if app.owner_id and app.owner_id != user_id and not (user and user.is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to view this app")
     return app
 
 
